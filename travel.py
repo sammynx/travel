@@ -115,7 +115,7 @@ def new_tour(name):
         dagen = int(input('Hoeveel dagen duurt deze tour: '))
         tourData['eind_datum'] = start + datetime.timedelta(days=dagen)
         tourData['dagen'] = dagen
-    tourData['budget'] = int(input('Wat is het budget :'))
+    tourData['budget'] = int(input('Wat is het budget? € '))
     return tourData
     
 
@@ -188,7 +188,7 @@ def geld(waarde):
     returns float: de waarde in euro's
     '''
     if waarde[-3].isalpha():
-        return conf[waarde[-3:]] * float(waarde[:-3])
+        return conf[waarde[-3:].toupper()] * float(waarde[:-3])
     else:
         return float(waarde)
 
@@ -297,10 +297,19 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='beheer tour databases.')
     parser.add_argument('-d', '--datum', type=validate_datum, default='', help='YYYY-MM-DD: is de key van db.')
+    parser.add_argument('--add_curency', action='store_true', help='Voegt een nieuwe 3-letter afkorting aan conf toe.')
     parser.add_argument('-p', '--print', action='store_true', help='Print de database op het scherm')
     parser.add_argument('tour', nargs='?', default=conf['last-used'], help='Naam van de tour die gebruikt moet worden.')
     parser.add_argument('--version', action='version', version='%(prog)s '+version)
     args = parser.parse_args()
+    if args.add-currency:
+        curr = input('Geef 3-letter afkorting voor de buitenlsndse munt: ')
+        if curr.isalpha() and len(curr) == 3:
+            conf[curr.toupper()] = float(input('Wat is de omrekenfactor naar euro? '))
+            save_config(conf, confFile)
+        else:
+            print('error: geef precies 3 letters voor de geld afkorting.')
+            
     data = open_tour(args.tour, dataDir)        
     if data:
         print('Tour: {}'.format(data['tour']['naam']))
