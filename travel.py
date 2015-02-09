@@ -245,8 +245,8 @@ def view_record(db, recordKey=None):
     '''
     # print header
     labels = ['Datum', 'Naar', 'Afstand', 'Eten', 'Hotel', 'Anders', 'Opmerkingen']
-    print('{0[0]:-^10} {0[1]:-^28} {0[2]:-^9} {0[3]:-^10} {0[4]:-^10} {0[5]:-^10} {0[6]}'.format(labels))
-    recordLine = '{:10} {:28} {:9} {:10.2f} {:10.2f} {:10.2f}  {}'
+    print('{0[0]:-^10} {0[1]:-^28} {0[2]:-^12} {0[3]:-^11} {0[4]:-^11} {0[5]:-^11} {0[6]}'.format(labels))
+    recordLine = '{:10} {:28} {:9} km {:10.2f} €{:10.2f} €{:10.2f} € {}'
     if recordKey:
         print(recordLine.format(recordKey, db[recordKey].get('naar', ''),
                                            db[recordKey].get('afstand', 0),
@@ -263,7 +263,7 @@ def view_record(db, recordKey=None):
                                          db[key].get('hotel', 0),
                                          db[key].get('anders', 0),
                                          db[key].get('opmerkingen', '')))
-        totalLine = '{:40}km{:7}  {:9.2f}€ {:9.2f}€ {:9.2f}€ '
+        totalLine = '{:40}{:9} km  {:9.2f} € {:9.2f} € {:9.2f} € '
         print()
         print(totalLine.format('',get_field_total(db, 'afstand'), get_field_total(db, 'eten'), get_field_total(db, 'hotel'), get_field_total(db, 'anders'), ''))
     
@@ -297,12 +297,12 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='beheer tour databases.')
     parser.add_argument('-d', '--datum', type=validate_datum, default='', help='YYYY-MM-DD: is de key van db.')
-    parser.add_argument('--add_curency', action='store_true', help='Voegt een nieuwe 3-letter afkorting aan conf toe.')
+    parser.add_argument('--add_currency', action='store_true', help='Voegt een nieuwe 3-letter afkorting aan conf toe.')
     parser.add_argument('-p', '--print', action='store_true', help='Print de database op het scherm')
     parser.add_argument('tour', nargs='?', default=conf['last-used'], help='Naam van de tour die gebruikt moet worden.')
     parser.add_argument('--version', action='version', version='%(prog)s '+version)
     args = parser.parse_args()
-    if args.add-currency:
+    if args.add_currency:
         curr = input('Geef 3-letter afkorting voor de buitenlsndse munt: ')
         if curr.isalpha() and len(curr) == 3:
             conf[curr.toupper()] = float(input('Wat is de omrekenfactor naar euro? '))
