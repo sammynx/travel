@@ -331,14 +331,11 @@ if __name__ == '__main__':
                     del data[args.datum.isoformat()]
                     print('Record gewist.\n')
                     print_stats(data)
-                    save_tour(data, dataDir)
                 elif wva == 'v':
                     # Vervangen
-                    data[args.datum.isoformat()] = new_record()
-                    view_record(data, args.datum.isoformat())
-                    print('Record vervangen.\n')
+                    data[args.datum.isoformat()] = new_record(data[args.datum.isoformat()])
+                    print('Record is vervangen.\n')
                     print_stats(data)
-                    save_tour(data, dataDir)
             else:
                 # Toevoegen
                 if input('Record maken voor {} J/n '.format(args.datum.strftime('%A %d %B %Y'))) in ('j', 'J', ''):
@@ -347,7 +344,8 @@ if __name__ == '__main__':
                     view_record(data, args.datum.isoformat())
                     print('Record toegevoegd.\n')
                     print_stats(data)
-                    save_tour(data, dataDir)
+            # Save de data
+            save_tour(data, dataDir)
     else:
         print('Geen tour database geopend.')
 
