@@ -78,7 +78,7 @@ def save_config(confData, confFile):
     '''
     with open(confFile, 'w') as outfile:
         json.dump(confData, outfile, indent=4)
-    print('Configuratie opgeslagen.')
+    print(': Configuratie opgeslagen.')
 
 
 def new_tour(name):
@@ -99,7 +99,7 @@ def new_tour(name):
         print(e)
     tourData['start_datum'] = start
     print(start)
-    dt = input('Eind datum YYYY-MM-DD: ')
+    dt = input('Eind datum.(NIET INCL.) YYYY-MM-DD: ')
     # Einddatum mag leeg zijn
     if dt:
         try:
@@ -136,7 +136,7 @@ def open_tour(name, traveldir):
             if not os.path.exists(traveldir):
                 os.makedir(traveldir)
             tourData = {'tour' : new_tour(name)}
-            print('Tour : {}, is aangemaakt.'.format(tourData['naam']))
+            print(': Tour : {}, is aangemaakt.'.format(tourData['naam']))
         else:
             tourData = None
     else:
@@ -153,7 +153,7 @@ def open_tour(name, traveldir):
             jn = input('Tour < {} > Nieuw aanmaken? J/n'.format(name))
             if jn in ('j', 'J', ''):
                 tourData = {'tour' : new_tour(name)}
-                print('Tour : {}, is aangemaakt.'.format(tourData['tour']['naam']))
+                print(': Tour : {}, is aangemaakt.'.format(tourData['tour']['naam']))
                 if not os.path.exists(traveldir):
                     os.mkdir(traveldir)
             else:
@@ -175,7 +175,7 @@ def save_tour(db, traveldir):
     db['tour']['eind_datum'] = db['tour']['eind_datum'].toordinal()
     with open(os.path.join(traveldir, db['tour']['naam'] + '.json'), 'w') as outfile:
         json.dump(db, outfile)
-    print('Tour: {} is opgeslagen.'.format(db['tour']['naam']))
+    print(': Tour: {} is opgeslagen.'.format(db['tour']['naam']))
     
 
 def geld(waarde):
@@ -187,8 +187,8 @@ def geld(waarde):
 
     returns float: de waarde in euro's
     '''
-    if waarde[-3].isalpha():
-        return conf[waarde[-3:].toupper()] * float(waarde[:-3])
+    if waarde[-1].isalpha():
+        return conf[waarde[-3:].upper()] * float(waarde[:-3])
     else:
         return float(waarde)
 
@@ -264,8 +264,9 @@ def view_record(db, recordKey=None):
                                          db[key].get('anders', 0),
                                          db[key].get('opmerkingen', '')))
         totalLine = '{:40}{:9} km  {:9.2f} € {:9.2f} € {:9.2f} € '
-        print()
+        print('{0:39} {0:-<12} {0:-<12} {0:-<11} {0:-<11}'.format(''))
         print(totalLine.format('',get_field_total(db, 'afstand'), get_field_total(db, 'eten'), get_field_total(db, 'hotel'), get_field_total(db, 'anders'), ''))
+        print('{0:39} {0:-<49}'.format(''))
     
 
 def print_stats(data):
@@ -278,16 +279,14 @@ def print_stats(data):
     '''
     info = data['tour']
     afstandTotal = get_field_total(data, 'afstand')
-    print()
-    print('Tour periode: <{}> tot <{}>'.format(info['start_datum'].strftime("%d %B %Y"), info['eind_datum'].strftime("%d %B %Y")))
-    print('Dag {} van {}'.format(len(data) - 1, info['dagen']), end='')
-    print(' * Afgelegde afstand: {} km * daggemiddelde: {} km'.format(afstandTotal, int(afstandTotal / (len(data) - 1))))
+    print('Dag {} van {} | Afgelegde afstand: {} km | daggemiddelde: {} km'.format(len(data) - 1, info['dagen'], afstandTotal, int(afstandTotal / (len(data) - 1))))
+    print('Uitgaven')
     kosten = [get_field_total(data, 'eten'), get_field_total(data, 'hotel'), get_field_total(data, 'anders')]
-    print('\n{:10}{:>12}{:>12}{:>12}{:>12}'.format('', 'Eten €', 'Hotel €', 'Anders €', 'Totaal €'))
+    print('{:10}{:>12}{:>12}{:>12}{:>12}'.format('', 'Eten €', 'Hotel €', 'Anders €', 'Totaal €'))
     print('{0:>10}{1[0]:12.2f}{1[1]:12.2f}{1[2]:12.2f}{2:12.2f}'.format('totaal :', kosten, sum(kosten)))
     print('{0:>10}{1[0]:12.2f}{1[1]:12.2f}{1[2]:12.2f}{2:12.2f}'.format('per dag :', [x / (len(data) -1) for x in kosten], sum([x / (len(data) -1) for x in kosten])))
     print()
-    print('Budget resterend: € {:.2f}, per dag: € {:.2f}'.format(info['budget'] - sum(kosten), (info['budget'] - sum(kosten)) / (info['dagen'] - len(data) - 1)))
+    print('Budget resterend: € {:.2f}, per dag: € {:.2f}'.format(info['budget'] - sum(kosten), (info['budget'] - sum(kosten)) / (info['dagen'] - (len(data) - 1))))
 
 
 if __name__ == '__main__':
@@ -308,44 +307,51 @@ if __name__ == '__main__':
             conf[curr.toupper()] = float(input('Wat is de omrekenfactor naar euro? '))
             save_config(conf, confFile)
         else:
-            print('error: geef precies 3 letters voor de geld afkorting.')
+            print(': error: geef precies 3 letters voor de geld afkorting.')
             
     data = open_tour(args.tour, dataDir)        
     if data:
-        print('Tour: {}'.format(data['tour']['naam']))
+        print('Tour: {} | {} - {}'.format(data['tour']['naam'], data['tour']['start_datum'].strftime("%d %B %Y"), data['tour']['eind_datum'].strftime("%d %B %Y")))
         if conf['last-used'] != data['tour']['naam']:
             conf['last-used'] = data['tour']['naam']
             save_config(conf, confFile)
         if args.print:
-            print('  {}'.format(data['tour']['omschrijving']))
+            print('* {} *'.format(data['tour']['omschrijving']))
             print()
             view_record(data)
             print_stats(data)
         else:
-            if args.datum.isoformat() in data:
-                print()
-                view_record(data, args.datum.isoformat())
-                wva = input('{} bestaat al. Wil je (w)issen, (v)ervangen of (a)nnuleren?'.format(args.datum))
-                if wva == 'w':
-                    # Wissen
-                    del data[args.datum.isoformat()]
-                    print('Record gewist.\n')
-                    print_stats(data)
-                elif wva == 'v':
-                    # Vervangen
-                    data[args.datum.isoformat()] = new_record(data[args.datum.isoformat()])
-                    print('Record is vervangen.\n')
-                    print_stats(data)
-            else:
-                # Toevoegen
-                if input('Record maken voor {} J/n '.format(args.datum.strftime('%A %d %B %Y'))) in ('j', 'J', ''):
-                    data[args.datum.isoformat()] = new_record()
+            if data['tour']['start_datum'] <= args.datum <= data['tour']['eind_datum']:
+                if args.datum.isoformat() in data:
                     print()
                     view_record(data, args.datum.isoformat())
-                    print('Record toegevoegd.\n')
+                    print()
+                    wva = input('Deze dag bestaat al. Wil je (w)issen, (v)ervangen of (a)nnuleren?')
+                    if wva == 'w':
+                        # Wissen
+                        del data[args.datum.isoformat()]
+                        print(': Record gewist.\n')
+                        print_stats(data)
+                    elif wva == 'v':
+                        # Vervangen
+                        data[args.datum.isoformat()] = new_record(data[args.datum.isoformat()])
+                        print(': Record is vervangen.\n')
+                        print_stats(data)
+                else:
+                    # Toevoegen
+                    print('Nieuw record voor {}'.format(args.datum.strftime('%A %d %B %Y')))
+                    if args.datum > datetime.date.today():
+                        print(': LET OP! Datum is in de toekomst.')
+                    data[args.datum.isoformat()] = new_record()
+                    print(': Record toegevoegd.\n')
                     print_stats(data)
-            # Save de data
-            save_tour(data, dataDir)
+                # Save de data
+                if input('Wijzigingen opslaan? J/n: ') in ('J','j',''):
+                    save_tour(data, dataDir)
+                else:
+                    print(': Er is niets opgeslagen!')
+            else:
+                print(': Datum is niet in deze tour! Sluiten...')
     else:
-        print('Geen tour database geopend.')
+        print(': Geen tour database geopend. Sluiten...')
 
