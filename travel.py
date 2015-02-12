@@ -4,7 +4,7 @@
 # database is een dict met datums als key
 # en record dicts als values
 
-version = '2.0'
+version = '2.1'
 
 import os
 import json
@@ -92,14 +92,16 @@ def new_tour(name):
     tourData = {'naam' : name}
     tourData['omschrijving'] = input('Korte omschrijving: ')
     dt = input('Start datum YYYY-MM-DD [vandaag]*: ')
-    # Startdatum heeft altijd een waarde
+    # Startdatum moet altijd een waarde hebben.
     try:
         start = validate_datum(dt)
     except DatumError as e:
         print(e)
     tourData['start_datum'] = start
+    # Key van de eerstvolgende nieuwe record
+    tourData['nieuw_record'] = start
     print(start)
-    dt = input('Eind datum.(NIET INCL.) YYYY-MM-DD: ')
+    dt = input('Eind datum. YYYY-MM-DD: ')
     # Einddatum mag leeg zijn
     if dt:
         try:
@@ -108,13 +110,10 @@ def new_tour(name):
             print(e)
         tourData['eind_datum'] = eind
         print(eind)
-        dagen = eind - start
-        print('Aantal dagen: {}'.format(dagen.days))
-        tourData['dagen'] = dagen.days
+        print('Aantal dagen: {}'.format((eind-start).days+1))
     else:
         dagen = int(input('Hoeveel dagen duurt deze tour: '))
         tourData['eind_datum'] = start + datetime.timedelta(days=dagen)
-        tourData['dagen'] = dagen
     tourData['budget'] = int(input('Wat is het budget? € '))
     return tourData
     
@@ -148,6 +147,8 @@ def open_tour(name, traveldir):
                 # restore de date objects
                 tourData['tour']['start_datum'] = datetime.date.fromordinal(int(tourData['tour']['start_datum']))
                 tourData['tour']['eind_datum'] = datetime.date.fromordinal(int(tourData['tour']['eind_datum'])) 
+                if tourData['tour']['nieuw_record']:
+                    tourData['tour']['nieuw_record'] = datetime.date.fromordinal(int(tourData['tour']['nieuw_record'])) 
         except FileNotFoundError:
             # tour bestaat niet
             jn = input('Tour < {} > Nieuw aanmaken? J/n'.format(name))
@@ -173,6 +174,8 @@ def save_tour(db, traveldir):
     # JSON kan geen date objects serializen
     db['tour']['start_datum'] = db['tour']['start_datum'].toordinal()
     db['tour']['eind_datum'] = db['tour']['eind_datum'].toordinal()
+    if db['tour']['nieuw_record']:
+        db['tour']['nieuw_record'] = db['tour']['nieuw_record'].toordinal()
     with open(os.path.join(traveldir, db['tour']['naam'] + '.json'), 'w') as outfile:
         json.dump(db, outfile)
     print(': Tour: {} is opgeslagen.'.format(db['tour']['naam']))
@@ -278,15 +281,22 @@ def print_stats(data):
     returns None
     '''
     info = data['tour']
+    tourDagen = len(data) - 1
+    maxDagen = (info['eind_datum'] - info['start_datum']).days + 1
+    restDagen = (maxDagen - tourDagen)
+    if restDagen == 0:
+        restDagen = 1
     afstandTotal = get_field_total(data, 'afstand')
-    print('Dag {} van {} | Afgelegde afstand: {} km | daggemiddelde: {} km'.format(len(data) - 1, info['dagen'], afstandTotal, int(afstandTotal / (len(data) - 1))))
-    print('Uitgaven')
     kosten = [get_field_total(data, 'eten'), get_field_total(data, 'hotel'), get_field_total(data, 'anders')]
+    restBudget = info['budget'] - sum(kosten)
+
+    print('Dag {} van {} | Afgelegde afstand: {} km | daggemiddelde: {} km'.format(tourDagen, maxDagen, afstandTotal, int(afstandTotal / tourDagen)))
+    print('Uitgaven')
     print('{:10}{:>12}{:>12}{:>12}{:>12}'.format('', 'Eten €', 'Hotel €', 'Anders €', 'Totaal €'))
     print('{0:>10}{1[0]:12.2f}{1[1]:12.2f}{1[2]:12.2f}{2:12.2f}'.format('totaal :', kosten, sum(kosten)))
-    print('{0:>10}{1[0]:12.2f}{1[1]:12.2f}{1[2]:12.2f}{2:12.2f}'.format('per dag :', [x / (len(data) -1) for x in kosten], sum([x / (len(data) -1) for x in kosten])))
+    print('{0:>10}{1[0]:12.2f}{1[1]:12.2f}{1[2]:12.2f}{2:12.2f}'.format('per dag :', [x / tourDagen for x in kosten], sum([x / tourDagen for x in kosten])))
     print()
-    print('Budget resterend: € {:.2f}, per dag: € {:.2f}'.format(info['budget'] - sum(kosten), (info['budget'] - sum(kosten)) / (info['dagen'] - (len(data) - 1))))
+    print('Budget resterend: € {:.2f}, per dag: € {:.2f}'.format(restBudget, (restBudget / restDagen)))
 
 
 if __name__ == '__main__':
@@ -295,16 +305,16 @@ if __name__ == '__main__':
     dataDir = conf['data_dir'] 
 
     parser = argparse.ArgumentParser(description='beheer tour databases.')
-    parser.add_argument('-d', '--datum', type=validate_datum, default='', help='YYYY-MM-DD: is de key van db.')
     parser.add_argument('--add_currency', action='store_true', help='Voegt een nieuwe 3-letter afkorting aan conf toe.')
     parser.add_argument('-p', '--print', action='store_true', help='Print de database op het scherm')
+    parser.add_argument('-e', '--edit', nargs='?', const='', help='Bewerk een record met datum EDIT.')
     parser.add_argument('tour', nargs='?', default=conf['last-used'], help='Naam van de tour die gebruikt moet worden.')
     parser.add_argument('--version', action='version', version='%(prog)s '+version)
     args = parser.parse_args()
     if args.add_currency:
         curr = input('Geef 3-letter afkorting voor de buitenlsndse munt: ')
         if curr.isalpha() and len(curr) == 3:
-            conf[curr.toupper()] = float(input('Wat is de omrekenfactor naar euro? '))
+           conf[curr.toupper()] = float(input('Wat is de omrekenfactor naar euro? '))
             save_config(conf, confFile)
         else:
             print(': error: geef precies 3 letters voor de geld afkorting.')
@@ -321,37 +331,40 @@ if __name__ == '__main__':
             view_record(data)
             print_stats(data)
         else:
-            if data['tour']['start_datum'] <= args.datum <= data['tour']['eind_datum']:
-                if args.datum.isoformat() in data:
-                    print()
-                    view_record(data, args.datum.isoformat())
-                    print()
-                    wva = input('Deze dag bestaat al. Wil je (w)issen, (v)ervangen of (a)nnuleren?')
-                    if wva == 'w':
-                        # Wissen
-                        del data[args.datum.isoformat()]
-                        print(': Record gewist.\n')
-                        print_stats(data)
-                    elif wva == 'v':
-                        # Vervangen
-                        data[args.datum.isoformat()] = new_record(data[args.datum.isoformat()])
-                        print(': Record is vervangen.\n')
-                        print_stats(data)
-                else:
-                    # Toevoegen
-                    print('Nieuw record voor {}'.format(args.datum.strftime('%A %d %B %Y')))
-                    if args.datum > datetime.date.today():
-                        print(': LET OP! Datum is in de toekomst.')
-                    data[args.datum.isoformat()] = new_record()
+            if args.edit == None:
+                # Toevoegen
+                if data['tour']['nieuw_record']:
+                    print('Nieuw record voor {}'.format(data['tour']['nieuw_record'].strftime('%A %d %B %Y')))
+                    data[data['tour']['nieuw_record'].isoformat()] = new_record()
+                    # Zet key voor nieuw record, None als laatste dag in tour voorbij is.
+                    if data['tour']['nieuw_record'] == data['tour']['eind_datum']:
+                        data['tour']['nieuw_record'] = None
+                    else:
+                        data['tour']['nieuw_record'] = data['tour']['nieuw_record'] + datetime.timedelta(days=1)
                     print(': Record toegevoegd.\n')
                     print_stats(data)
-                # Save de data
-                if input('Wijzigingen opslaan? J/n: ') in ('J','j',''):
-                    save_tour(data, dataDir)
+                    # Save de data
+                    if input('Wijzigingen opslaan? J/n: ') in ('J','j',''):
+                        save_tour(data, dataDir)
+                    else:
+                        print(': Er is niets opgeslagen!')
                 else:
-                    print(': Er is niets opgeslagen!')
+                    print('Helaas is deze tour al klaar. Je kunt nog wel bewrken met --edit.')
             else:
-                print(': Datum is niet in deze tour! Sluiten...')
+                # Bewerken
+                datum = validate_datum(args.edit)
+                print('Bewerk record voor {}'.format(datum.strftime('%A %d %B %Y')))
+                if data['tour']['start_datum'] <= datum <= data['tour']['eind_datum']:
+                    data[datum.isoformat()] = new_record(data[datum.isoformat()])
+                    print(': Record is vervangen.\n')
+                    print_stats(data)
+                    # Save de data
+                    if input('Wijzigingen opslaan? J/n: ') in ('J','j',''):
+                        save_tour(data, dataDir)
+                    else:
+                        print(': Er is niets opgeslagen!')
+                else:
+                    raise DatumError('Deze dag is niet in de database!')
     else:
         print(': Geen tour database geopend. Sluiten...')
 
