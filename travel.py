@@ -85,16 +85,24 @@ def new_tour(name):
     ''' Creeert een nieuwe database.
     
     keyword arguments:
-    name: string: naam vd tour
+    name: str: naam vd tour (en basename voor file)
     
+    fields:
+    start_datum: date
+    eind_datum: date
+    omschrijving: str
+    budget: float
+    nieuw_record: date  datum van volgend record.
+    version: str        versie van travel die db maakt.
+
     return: dict: tourinfo
     '''
-    tourData = {'naam' : name}
+    tourData = {'naam': name}
+    tourData['version'] = version
     tourData['omschrijving'] = input('Korte omschrijving: ')
-    dt = input('Start datum YYYY-MM-DD [vandaag]*: ')
     # Startdatum moet altijd een waarde hebben.
     try:
-        start = validate_datum(dt)
+        start = validate_datum(input('Start datum YYYY-MM-DD [vandaag]*: '))
     except DatumError as e:
         print(e)
     tourData['start_datum'] = start
@@ -113,8 +121,13 @@ def new_tour(name):
         print('Aantal dagen: {}'.format((eind-start).days+1))
     else:
         dagen = int(input('Hoeveel dagen duurt deze tour: '))
-        tourData['eind_datum'] = start + datetime.timedelta(days=dagen)
-    tourData['budget'] = int(input('Wat is het budget? € '))
+        tourData['eind_datum'] = start + datetime.timedelta(days=dagen - 1)
+        print(tourData['eind_datum'])
+    budget = input('Wat is het budget? [0.00] € ')
+    if budget:
+        tourData['budget'] = float(budget)
+    else:
+        tourData['budget'] = 0.0
     return tourData
     
 
@@ -127,38 +140,28 @@ def open_tour(name, traveldir):
     
     returns: dict: de tour data of None als er geen data is.
     '''
-    if name == '':
-        jn = input('Er zijn nog geen tours in de database, een nieuwe maken? J/n')
+    while not name:
+        input('Geef een naam voor de nieuwe tour: ')
+    # creeer filenaam waar db in opgeslagen is.
+    fname = os.path.join(traveldir, name + '.json')
+    try:
+        with open(fname) as infile:
+            tourData = json.load(infile)
+            # restore de date objects
+            tourData['tour']['start_datum'] = datetime.date.fromordinal(int(tourData['tour']['start_datum']))
+            tourData['tour']['eind_datum'] = datetime.date.fromordinal(int(tourData['tour']['eind_datum'])) 
+            if tourData['tour']['nieuw_record']:
+                tourData['tour']['nieuw_record'] = datetime.date.fromordinal(int(tourData['tour']['nieuw_record'])) 
+    except FileNotFoundError:
+        # tour bestaat niet
+        jn = input('Tour < {} > Nieuw aanmaken? J/n'.format(name))
         if jn in ('j', 'J', ''):
-            while not name:
-                name = input('Nieuwe naam: ')
             if not os.path.exists(traveldir):
-                os.makedir(traveldir)
-            tourData = {'tour' : new_tour(name)}
-            print(': Tour : {}, is aangemaakt.'.format(tourData['naam']))
+                os.mkdir(traveldir)
+            save_tour({'tour' : new_tour(name)}, conf['data_dir'])
+            tourData = open_tour(name, conf['data_dir'])
         else:
             tourData = None
-    else:
-        # creeer filenaam waar db in opgeslagen is.
-        fname = os.path.join(traveldir, name + '.json')
-        try:
-            with open(fname) as infile:
-                tourData = json.load(infile)
-                # restore de date objects
-                tourData['tour']['start_datum'] = datetime.date.fromordinal(int(tourData['tour']['start_datum']))
-                tourData['tour']['eind_datum'] = datetime.date.fromordinal(int(tourData['tour']['eind_datum'])) 
-                if tourData['tour']['nieuw_record']:
-                    tourData['tour']['nieuw_record'] = datetime.date.fromordinal(int(tourData['tour']['nieuw_record'])) 
-        except FileNotFoundError:
-            # tour bestaat niet
-            jn = input('Tour < {} > Nieuw aanmaken? J/n'.format(name))
-            if jn in ('j', 'J', ''):
-                tourData = {'tour' : new_tour(name)}
-                print(': Tour : {}, is aangemaakt.'.format(tourData['tour']['naam']))
-                if not os.path.exists(traveldir):
-                    os.mkdir(traveldir)
-            else:
-                tourData = None
     return tourData
     
 
@@ -314,14 +317,14 @@ if __name__ == '__main__':
     if args.add_currency:
         curr = input('Geef 3-letter afkorting voor de buitenlsndse munt: ')
         if curr.isalpha() and len(curr) == 3:
-           conf[curr.toupper()] = float(input('Wat is de omrekenfactor naar euro? '))
-            save_config(conf, confFile)
+           conf[curr.upper()] = float(input('Wat is de omrekenfactor naar euro? '))
+           save_config(conf, confFile)
         else:
             print(': error: geef precies 3 letters voor de geld afkorting.')
             
     data = open_tour(args.tour, dataDir)        
     if data:
-        print('Tour: {} | {} - {}'.format(data['tour']['naam'], data['tour']['start_datum'].strftime("%d %B %Y"), data['tour']['eind_datum'].strftime("%d %B %Y")))
+        print('Tour: {} (v.{}) | {} - {}'.format(data['tour']['naam'], data['tour']['version'], data['tour']['start_datum'].strftime("%d %B %Y"), data['tour']['eind_datum'].strftime("%d %B %Y")))
         if conf['last-used'] != data['tour']['naam']:
             conf['last-used'] = data['tour']['naam']
             save_config(conf, confFile)
@@ -335,19 +338,20 @@ if __name__ == '__main__':
                 # Toevoegen
                 if data['tour']['nieuw_record']:
                     print('Nieuw record voor {}'.format(data['tour']['nieuw_record'].strftime('%A %d %B %Y')))
-                    data[data['tour']['nieuw_record'].isoformat()] = new_record()
-                    # Zet key voor nieuw record, None als laatste dag in tour voorbij is.
-                    if data['tour']['nieuw_record'] == data['tour']['eind_datum']:
-                        data['tour']['nieuw_record'] = None
-                    else:
-                        data['tour']['nieuw_record'] = data['tour']['nieuw_record'] + datetime.timedelta(days=1)
-                    print(': Record toegevoegd.\n')
-                    print_stats(data)
-                    # Save de data
-                    if input('Wijzigingen opslaan? J/n: ') in ('J','j',''):
-                        save_tour(data, dataDir)
-                    else:
-                        print(': Er is niets opgeslagen!')
+                    if (input('Record toevoegen ? J/n ') in ('j','J','')):
+                        data[data['tour']['nieuw_record'].isoformat()] = new_record()
+                        # Zet key voor nieuw record, None als laatste dag in tour voorbij is.
+                        if data['tour']['nieuw_record'] == data['tour']['eind_datum']:
+                            data['tour']['nieuw_record'] = None
+                        else:
+                            data['tour']['nieuw_record'] = data['tour']['nieuw_record'] + datetime.timedelta(days=1)
+                        print(': Record toegevoegd.\n')
+                        print_stats(data)
+                        # Save de data
+                        if input('Wijzigingen opslaan? J/n: ') in ('J','j',''):
+                            save_tour(data, dataDir)
+                        else:
+                            print(': Er is niets opgeslagen!')
                 else:
                     print('Helaas is deze tour al klaar. Je kunt nog wel bewrken met --edit.')
             else:
