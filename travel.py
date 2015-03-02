@@ -4,7 +4,7 @@
 # database is een dict met datums als key
 # en record dicts als values
 
-version = '2.1'
+version = '2.2'
 
 import os
 import json
@@ -214,7 +214,10 @@ def new_record(default={}):
         if fieldValue == '' and default.get(label):
             record[label] = default[label]
         elif fieldValue:
-            record[label] = validate(fieldValue)
+            if validate == geld and fieldValue[0] == '+':
+                record[label] = validate(fieldValue[1:]) + default.get(label, 0.0)
+            else:
+                record[label] = validate(fieldValue)
     return record
 
 
@@ -227,16 +230,9 @@ def get_field_total(db, field):
 
     returns float:
     '''
-    if field == 'afstand':
-        # integer
-        total = 0
-        default = 0
-    else:
-        # float
-        total = 0.0
-        default = 0.0
+    total = 0
     for rec in db:
-        total += db[rec].get(field, default)
+        total += db[rec].get(field, 0)
     return total
 
 
@@ -251,8 +247,8 @@ def view_record(db, recordKey=None):
     '''
     # print header
     labels = ['Datum', 'Naar', 'Afstand', 'Eten', 'Hotel', 'Anders', 'Opmerkingen']
-    print('{0[0]:-^10} {0[1]:-^28} {0[2]:-^12} {0[3]:-^11} {0[4]:-^11} {0[5]:-^11} {0[6]}'.format(labels))
-    recordLine = '{:10} {:28} {:9} km {:10.2f} €{:10.2f} €{:10.2f} € {}'
+    print('{0[0]:-^10} {0[1]:-<28} {0[2]:->11}- {0[3]:->10}- {0[4]:->10}- {0[5]:->10}- {0[6]}'.format(labels))
+    recordLine = '{:10} {:28} {:9} km{:10.2f} €{:10.2f} €{:10.2f} € {}'
     if recordKey:
         print(recordLine.format(recordKey, db[recordKey].get('naar', ''),
                                            db[recordKey].get('afstand', 0),
@@ -269,11 +265,27 @@ def view_record(db, recordKey=None):
                                          db[key].get('hotel', 0),
                                          db[key].get('anders', 0),
                                          db[key].get('opmerkingen', '')))
-        totalLine = '{:40}{:9} km  {:9.2f} € {:9.2f} € {:9.2f} € '
+        totalLine = '{:40}{:9} km{:10.2f} €{:10.2f} €{:10.2f} € '
         print('{0:39} {0:-<12} {0:-<12} {0:-<11} {0:-<11}'.format(''))
         print(totalLine.format('',get_field_total(db, 'afstand'), get_field_total(db, 'eten'), get_field_total(db, 'hotel'), get_field_total(db, 'anders'), ''))
         print('{0:39} {0:-<49}'.format(''))
     
+
+def fiets_dagen(db):
+    '''Berekent het aantal tourdagen zonder de rustdagen.
+
+    keyword arguments:
+    db: dict: de database
+
+    returns int
+    '''
+    dagen = 0
+    for rec in db:
+        if db[rec].get('afstand'):
+            # alle dagen die een afstand hebben.
+            dagen += 1
+    return dagen
+
 
 def print_stats(data):
     ''' Print statistieken over de tour.
@@ -285,6 +297,7 @@ def print_stats(data):
     '''
     info = data['tour']
     tourDagen = len(data) - 1
+    fietsDagen = fiets_dagen(data)
     maxDagen = (info['eind_datum'] - info['start_datum']).days + 1
     restDagen = (maxDagen - tourDagen)
     if restDagen == 0:
@@ -293,7 +306,13 @@ def print_stats(data):
     kosten = [get_field_total(data, 'eten'), get_field_total(data, 'hotel'), get_field_total(data, 'anders')]
     restBudget = info['budget'] - sum(kosten)
 
-    print('Dag {} van {} | Afgelegde afstand: {} km | daggemiddelde: {} km'.format(tourDagen, maxDagen, afstandTotal, int(afstandTotal / tourDagen)))
+    statline = 'Dag {} van {} | rustdagen: {} | Afgelegde afstand: {} km | daggemiddelde fietsdagen: {} km (totaal: {} km)'
+    print(statline.format(tourDagen,
+                          maxDagen,
+                          tourDagen - fietsDagen,
+                          afstandTotal,
+                          int(afstandTotal / fietsDagen),
+                          int(afstandTotal / tourDagen)))
     print('Uitgaven')
     print('{:10}{:>12}{:>12}{:>12}{:>12}'.format('', 'Eten €', 'Hotel €', 'Anders €', 'Totaal €'))
     print('{0:>10}{1[0]:12.2f}{1[1]:12.2f}{1[2]:12.2f}{2:12.2f}'.format('totaal :', kosten, sum(kosten)))
@@ -307,11 +326,11 @@ if __name__ == '__main__':
     conf = open_config(confFile)
     dataDir = conf['data_dir'] 
 
-    parser = argparse.ArgumentParser(description='beheer tour databases.')
+    parser = argparse.ArgumentParser(description='beheer tour databases. Tours hebben per dag een record.')
     parser.add_argument('--add_currency', action='store_true', help='Voegt een nieuwe 3-letter afkorting aan conf toe.')
     parser.add_argument('-p', '--print', action='store_true', help='Print de database op het scherm')
     parser.add_argument('-e', '--edit', nargs='?', const='', help='Bewerk een record met datum EDIT.')
-    parser.add_argument('tour', nargs='?', default=conf['last-used'], help='Naam van de tour die gebruikt moet worden.')
+    parser.add_argument('tour', nargs='?', default=conf['last-used'], help='Naam van de tour die gebruikt moet worden. default laatst gebruikt.')
     parser.add_argument('--version', action='version', version='%(prog)s '+version)
     args = parser.parse_args()
     if args.add_currency:
@@ -339,12 +358,14 @@ if __name__ == '__main__':
                 if data['tour']['nieuw_record']:
                     print('Nieuw record voor {}'.format(data['tour']['nieuw_record'].strftime('%A %d %B %Y')))
                     if (input('Record toevoegen ? J/n ') in ('j','J','')):
-                        data[data['tour']['nieuw_record'].isoformat()] = new_record()
+                        key = data['tour']['nieuw_record']
+                        data[key.isoformat()] = new_record()
                         # Zet key voor nieuw record, None als laatste dag in tour voorbij is.
-                        if data['tour']['nieuw_record'] == data['tour']['eind_datum']:
+                        if key == data['tour']['eind_datum']:
                             data['tour']['nieuw_record'] = None
                         else:
-                            data['tour']['nieuw_record'] = data['tour']['nieuw_record'] + datetime.timedelta(days=1)
+                            data['tour']['nieuw_record'] = key + datetime.timedelta(days=1)
+                        view_record(data, key.isoformat())
                         print(': Record toegevoegd.\n')
                         print_stats(data)
                         # Save de data
@@ -360,6 +381,7 @@ if __name__ == '__main__':
                 print('Bewerk record voor {}'.format(datum.strftime('%A %d %B %Y')))
                 if data['tour']['start_datum'] <= datum <= data['tour']['eind_datum']:
                     data[datum.isoformat()] = new_record(data[datum.isoformat()])
+                    view_record(data, datum.isoformat())
                     print(': Record is vervangen.\n')
                     print_stats(data)
                     # Save de data
