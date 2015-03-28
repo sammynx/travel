@@ -4,14 +4,51 @@
 # database is een dict met datums als key
 # en record dicts als values
 
-version = '2.2'
+__version__ = '2.3'
 
 import os
 import json
 import datetime
 import argparse
+import json_serializer
 import locale
 locale.setlocale(locale.LC_ALL, '')
+
+
+def open_config(cFile):
+    ''' Open configuratiebestand of maak een nieuwe.
+
+    keyword arguments:
+    cFile: string: pad en naam configuratie bestand
+
+    returns dict
+    '''
+    try:
+        with open(cFile, 'r', encoding='utf-8') as outfile:
+            return json.load(outfile)
+    except FileNotFoundError:
+        # geen configfile, dus first run
+        if not os.path.exists(os.path.join(os.path.expanduser('~'), '.config')):
+            os.mkdir(os.path.join(os.path.expanduser('~'), '.config'))
+        return {'last-used' : '',
+                'config_dir' : os.path.join(os.path.expanduser('~'), '.config'),
+                'data_dir' : os.path.join(os.path.expanduser('~'), 'traveldata')
+                }
+
+
+def save_config(confData, confFile):
+    ''' Save het configuratiebestand.
+
+    keyword arguments:
+    confFile: string: pad en naam van configuratie bestand.
+    confData : dict: config data
+
+    returns None
+    '''
+    with open(confFile, 'w', encoding='utf-8') as outfile:
+        json.dump(confData, outfile, indent=4)
+    print(':: Configuratie opgeslagen.')
+
 
 class DatumError(Exception):
     def __init__(self, value):
@@ -46,41 +83,6 @@ def validate_datum(datum):
         raise DatumError('DatumError: Verkeerd datumformaat. Correcte input is: YYYY-[M]M-[D]D, [M]M-[]DD, [D]D')
 
 
-def open_config(cFile):
-    ''' Open configuratiebestand of maak een nieuwe.
-
-    keyword arguments:
-    cFile: string: pad en naam configuratie bestand
-
-    returns dict
-    '''
-    try:
-        with open(cFile) as outfile:
-            return json.load(outfile)
-    except FileNotFoundError:
-        # geen configfile, dus first run
-        if not os.path.exists(os.path.join(os.path.expanduser('~'), '.config')):
-            os.mkdir(os.path.join(os.path.expanduser('~'), '.config'))
-        return {'last-used' : '',
-                'config_dir' : os.path.join(os.path.expanduser('~'), '.config'),
-                'data_dir' : os.path.join(os.path.expanduser('~'), 'traveldata')
-                }
-
-
-def save_config(confData, confFile):
-    ''' Save het configuratiebestand.
-
-    keyword arguments:
-    confFile: string: pad en naam van configuratie bestand.
-    confData : dict: config data
-
-    returns None
-    '''
-    with open(confFile, 'w') as outfile:
-        json.dump(confData, outfile, indent=4)
-    print(': Configuratie opgeslagen.')
-
-
 def new_tour(name):
     ''' Creeert een nieuwe database.
     
@@ -98,7 +100,7 @@ def new_tour(name):
     return: dict: tourinfo
     '''
     tourData = {'naam': name}
-    tourData['version'] = version
+    tourData['version'] = __version__
     tourData['omschrijving'] = input('Korte omschrijving: ')
     # Startdatum moet altijd een waarde hebben.
     try:
@@ -127,7 +129,7 @@ def new_tour(name):
     if budget:
         tourData['budget'] = float(budget)
     else:
-        tourData['budget'] = 0.0
+        tourData['budget'] = None
     return tourData
     
 
@@ -140,28 +142,27 @@ def open_tour(name, traveldir):
     
     returns: dict: de tour data of None als er geen data is.
     '''
+    min_db_version = 2.3
     while not name:
-        input('Geef een naam voor de nieuwe tour: ')
+        name = input('Geef een naam voor de nieuwe tour: ')
     # creeer filenaam waar db in opgeslagen is.
     fname = os.path.join(traveldir, name + '.json')
     try:
-        with open(fname) as infile:
-            tourData = json.load(infile)
-            # restore de date objects
-            tourData['tour']['start_datum'] = datetime.date.fromordinal(int(tourData['tour']['start_datum']))
-            tourData['tour']['eind_datum'] = datetime.date.fromordinal(int(tourData['tour']['eind_datum'])) 
-            if tourData['tour']['nieuw_record']:
-                tourData['tour']['nieuw_record'] = datetime.date.fromordinal(int(tourData['tour']['nieuw_record'])) 
+        with open(fname, 'r', encoding='utf-8') as infile:
+            tourData = json.load(infile, object_hook=json_serializer.from_json)
+            if float(tourData['tour']['version']) < min_db_version:
+                print(':: Database versie: {}. Vereist: {}'.format(tourData['tour']['version'], min_db_version))
+                return None
     except FileNotFoundError:
         # tour bestaat niet
         jn = input('Tour < {} > Nieuw aanmaken? J/n'.format(name))
         if jn in ('j', 'J', ''):
             if not os.path.exists(traveldir):
                 os.mkdir(traveldir)
-            save_tour({'tour' : new_tour(name)}, conf['data_dir'])
-            tourData = open_tour(name, conf['data_dir'])
+            tourData = {'tour' : new_tour(name)}
+            save_tour(tourData, conf['data_dir'])
         else:
-            tourData = None
+            return None
     return tourData
     
 
@@ -174,14 +175,9 @@ def save_tour(db, traveldir):
 
     returns None
     '''
-    # JSON kan geen date objects serializen
-    db['tour']['start_datum'] = db['tour']['start_datum'].toordinal()
-    db['tour']['eind_datum'] = db['tour']['eind_datum'].toordinal()
-    if db['tour']['nieuw_record']:
-        db['tour']['nieuw_record'] = db['tour']['nieuw_record'].toordinal()
-    with open(os.path.join(traveldir, db['tour']['naam'] + '.json'), 'w') as outfile:
-        json.dump(db, outfile)
-    print(': Tour: {} is opgeslagen.'.format(db['tour']['naam']))
+    with open(os.path.join(traveldir, db['tour']['naam'] + '.json'), 'w', encoding='utf-8') as outfile:
+        json.dump(db, outfile, default=json_serializer.to_json)
+    print(':: Tour: {} is opgeslagen.'.format(db['tour']['naam']))
     
 
 def geld(waarde):
@@ -304,7 +300,10 @@ def print_stats(data):
         restDagen = 1
     afstandTotal = get_field_total(data, 'afstand')
     kosten = [get_field_total(data, 'eten'), get_field_total(data, 'hotel'), get_field_total(data, 'anders')]
-    restBudget = info['budget'] - sum(kosten)
+    if info['budget']:
+        restBudget = info['budget'] - sum(kosten)
+    else:
+        restBudget = 0
 
     statline = 'Dag {} van {} | rustdagen: {} | Afgelegde afstand: {} km | daggemiddelde fietsdagen: {} km (totaal: {} km)'
     print(statline.format(tourDagen,
@@ -324,29 +323,42 @@ def print_stats(data):
 if __name__ == '__main__':
     confFile = os.path.join(os.path.expanduser('~'), '.config', 'travel.conf')
     conf = open_config(confFile)
-    dataDir = conf['data_dir'] 
+    data = None
 
     parser = argparse.ArgumentParser(description='beheer tour databases. Tours hebben per dag een record.')
-    parser.add_argument('--add_currency', action='store_true', help='Voegt een nieuwe 3-letter afkorting aan conf toe.')
+    parser.add_argument('--add-currency', dest='add_currency', action='store_true', help='Voegt een nieuwe 3-letter afkorting aan conf toe.')
+    parser.add_argument('--show-tours', dest='show_tours', action='store_true', help='Toon alle tour databases.')
     parser.add_argument('-p', '--print', action='store_true', help='Print de database op het scherm')
     parser.add_argument('-e', '--edit', nargs='?', const='', help='Bewerk een record met datum EDIT.')
     parser.add_argument('tour', nargs='?', default=conf['last-used'], help='Naam van de tour die gebruikt moet worden. default laatst gebruikt.')
-    parser.add_argument('--version', action='version', version='%(prog)s '+version)
+    parser.add_argument('--version', action='version', version='%(prog)s '+__version__)
     args = parser.parse_args()
+
+    # Arguments not requiring an open database
     if args.add_currency:
-        curr = input('Geef 3-letter afkorting voor de buitenlsndse munt: ')
+        curr = input('Geef 3-letter afkorting voor de buitenlandse munt: ')
         if curr.isalpha() and len(curr) == 3:
            conf[curr.upper()] = float(input('Wat is de omrekenfactor naar euro? '))
            save_config(conf, confFile)
         else:
-            print(': error: geef precies 3 letters voor de geld afkorting.')
-            
-    data = open_tour(args.tour, dataDir)        
+            print(':: error: geef precies 3 letters voor de geld afkorting.')
+    elif args.show_tours:
+        tourdbs = [os.path.splitext(file)[0] for file in os.listdir(path=conf['data_dir'])]
+        for e in sorted(tourdbs):
+            if e == conf['last-used']:
+                print('* {}'.format(e))
+            else:
+                print('  {}'.format(e))
+    else:   
+        data = open_tour(args.tour, conf['data_dir'])        
+
     if data:
         print('Tour: {} (v.{}) | {} - {}'.format(data['tour']['naam'], data['tour']['version'], data['tour']['start_datum'].strftime("%d %B %Y"), data['tour']['eind_datum'].strftime("%d %B %Y")))
+        # set last used tour in config file
         if conf['last-used'] != data['tour']['naam']:
             conf['last-used'] = data['tour']['naam']
             save_config(conf, confFile)
+        # print the database
         if args.print:
             print('* {} *'.format(data['tour']['omschrijving']))
             print()
@@ -365,32 +377,34 @@ if __name__ == '__main__':
                             data['tour']['nieuw_record'] = None
                         else:
                             data['tour']['nieuw_record'] = key + datetime.timedelta(days=1)
+                        print(':: Deze dag wordt toegevoegd...')
                         view_record(data, key.isoformat())
-                        print(': Record toegevoegd.\n')
-                        print_stats(data)
+                        print()
                         # Save de data
                         if input('Wijzigingen opslaan? J/n: ') in ('J','j',''):
-                            save_tour(data, dataDir)
+                            save_tour(data, conf['data_dir'])
+                            print()
+                            print_stats(data)
                         else:
-                            print(': Er is niets opgeslagen!')
+                            print(':: Er is niets opgeslagen!')
                 else:
-                    print('Helaas is deze tour al klaar. Je kunt nog wel bewrken met --edit.')
+                    print(':: Helaas is deze tour al klaar. Je kunt nog wel bewrken met --edit.')
             else:
                 # Bewerken
                 datum = validate_datum(args.edit)
                 print('Bewerk record voor {}'.format(datum.strftime('%A %d %B %Y')))
                 if data['tour']['start_datum'] <= datum <= data['tour']['eind_datum']:
                     data[datum.isoformat()] = new_record(data[datum.isoformat()])
+                    print(':: {}, Deze dag is gewijzigd...'.format(datum.strftime('%d %B')))
                     view_record(data, datum.isoformat())
-                    print(': Record is vervangen.\n')
-                    print_stats(data)
                     # Save de data
                     if input('Wijzigingen opslaan? J/n: ') in ('J','j',''):
-                        save_tour(data, dataDir)
+                        save_tour(data, conf['data_dir'])
+                        print_stats(data)
                     else:
-                        print(': Er is niets opgeslagen!')
+                        print(':: Er is niets opgeslagen!')
                 else:
                     raise DatumError('Deze dag is niet in de database!')
     else:
-        print(': Geen tour database geopend. Sluiten...')
+        print(':: Geen tour database geopend...')
 
