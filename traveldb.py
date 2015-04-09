@@ -61,7 +61,7 @@ def new_tour(name):
     '''
     while not name:
         name = input('Geef een naam voor de nieuwe tour: ')
-    print(': Maak tour {}'.format(name))
+    print(':: Maak tour {}'.format(name))
     tourData = {'naam': name}
     tourData['version'] = version
     tourData['omschrijving'] = input('Korte omschrijving: ')
@@ -133,4 +133,6 @@ class TravelDB():
     else:
         print(': Er is niets opgeslagen!')
     
+
+if __name__ == '__main__':
 
