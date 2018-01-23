@@ -1,0 +1,13 @@
+
+version 2.4
+-Vragen om bevestiging in save_tour gebouwd
+-
+
+version 2.3
+-Openen en opslaan van datafile maakt nu gebruik van json serializers. Hierdoor is het database format veranderd.
+-Toegevoegd --show-tours. Laat alle bekende databases zien.
+-Bij het toevoegen of editen worden de stats geprint nadat er is opgeslagen.
+
+version 2.2
+-Als veld is een geld waarde. Dan kan je een + als eerste teken gebruiken om op te tellen.
+-Bij toevoegen of edit print het record als je klaar bent.
