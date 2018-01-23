@@ -1,5 +1,5 @@
 #!/bin/python
-#travel_util.py: utilities for travel.py
+# travel_util.py: utilities for travel.py
 
 import datetime
 import json
@@ -26,16 +26,20 @@ def convert_db_to_23(tour_path):
         print(':: Originele database file opgeslagen als {}'.format(tour_path + '.old'))
         print(':: Converteren...')
         tour['start_datum'] = datetime.date.fromordinal(int(tour['start_datum']))
-        tour['eind_datum'] = datetime.date.fromordinal(int(tour['eind_datum'])) 
+        tour['eind_datum'] = datetime.date.fromordinal(int(tour['eind_datum']))
         if tour['nieuw_record']:
-            tour['nieuw_record'] = datetime.date.fromordinal(int(tour['nieuw_record'])) 
+            tour['nieuw_record'] = datetime.date.fromordinal( \
+                    int(tour['nieuw_record']))
         tour['version'] = '2.3'
         travel.save_tour(tourData, os.path.dirname(tour_path))
     else:
-        print(':: Deze database is versie {} en heeft dus geen conversie naar 2.3 nodig.'.format(tour['version']))
+        print(':: Deze database is versie {} en heeft dus geen conversie naar \
+               2.3 nodig.'.format(tour['version']))
+
 
 if __name__ == '__main__':
     conf = travel.open_config('/home/jerry/.config/travel.conf')
-    dbName = input('Naam van de te converteren database (als in --show-tours): ') + '.json'
+    dbName = input('Naam van de te converteren database \
+                    (als in --show-tours): ') + '.json'
     dbPath = os.path.join(conf['data_dir'], dbName)
     convert_db_to_23(dbPath)

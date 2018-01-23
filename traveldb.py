@@ -2,17 +2,19 @@
 # traveldb.py
 # Database voor travel
 
-version = '1.0'
-
 import json
 import os
 import datetime
 import json_serializer
 
 
+version = '1.0'
+
+
 class DatumError(Exception):
     def __init__(self, value):
         self.value = value
+
     def __str__(self):
         repr(self.value)
 
@@ -21,14 +23,13 @@ def validate_datum(datum):
     '''valideert en vult een datum aan.
     als dag of maand-dag wordt gegeven,
     wordt het aangevuld met de huidige datum
-    
+
     keyword arguments:
     datum: string in formaat YYYY-MM-DD, MM-DD, DD
-    
+
     return date
     '''
     td = datetime.date.today()
-        
     if datum == '':
         # Geen input dus vandaag returnen
         return td
@@ -36,11 +37,15 @@ def validate_datum(datum):
     if len(datumList) == 1:
         return td.replace(day=datumList[0])
     elif len(datumList) == 2:
-        return td.replace(day=datumList[1], month=datumList[0])
+        return td.replace(day=datumList[1],
+                          month=datumList[0])
     elif len(datumList) == 3:
-        return td.replace(day=datumList[2], month=datumList[1], year=datumList[0])
+        return td.replace(day=datumList[2],
+                          month=datumList[1],
+                          year=datumList[0])
     else:
-        raise DatumError('DatumError: Verkeerd datumformaat. Correcte input is: YYYY-[M]M-[D]D, [M]M-[]DD, [D]D')
+        raise DatumError('DatumError: Verkeerd datumformaat. \ 
+                Correcte input is: YYYY-[M]M-[D]D, [M]M-[]DD, [D]D')
 
 
 def new_tour(name):

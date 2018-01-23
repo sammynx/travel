@@ -3,6 +3,7 @@
 
 import datetime
 
+
 def to_json(python_object):
     ''' Change objects not serializable by json to serializable.
 
@@ -39,4 +40,3 @@ if __name__ == '__main__':
     jsonObject = json.dumps(d, default=to_json)
     d2 = json.loads(jsonObject, object_hook=from_json)
     print('Today (after json serializing): {}'.format(d2))
-
